@@ -33,11 +33,11 @@ module ActiveRecord #:nodoc:
                 send "#{name}_without_cleanup=", amount.blank? ? nil : amount.to_money(options[:precision])
               end
               alias_method_chain "#{name}=", :cleanup
+          else
+            define_method name.to_s do
+              ::Money.new(send(options[:cents])).to_money(options[:precision])
+            end
           end
-          
-          define_method name.to_s do
-            ::Money.new(send(options[:cents])).to_money(options[:precision])
-          end if options[:only_reader]
         end
       end
     end
