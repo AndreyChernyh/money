@@ -9,29 +9,35 @@ module ActiveRecord #:nodoc:
 
       module ClassMethods
         def money(name, options = {})
+          options[:only_reader] ||= false
           allow_nil = options.has_key?(:allow_nil) ? options.delete(:allow_nil) : true
           options = {:precision => 2, :cents => "#{name}_in_cents".to_sym }.merge(options)
           mapping = [[options[:cents], 'cents']]
           mapping << [options[:currency].to_s, 'currency'] if options[:currency]
-          composed_of name, :class_name => 'Money', :mapping => mapping, :allow_nil => allow_nil,
-            :converter => lambda{ |m|
-              if !allow_nil && m.nil?
-                currency = options[:currency] || ::Money.default_currency
-                m = ::Money.new(0, currency, options[:precision])
+          unless options[:only_reader]
+            composed_of name, :class_name => 'Money', :mapping => mapping, :allow_nil => allow_nil,
+              :converter => lambda{ |m|
+                if !allow_nil && m.nil?
+                  currency = options[:currency] || ::Money.default_currency
+                  m = ::Money.new(0, currency, options[:precision])
+                end
+                m.to_money(options[:precision])
+              },
+              :constructor => lambda{ |*args| 
+                cents, currency = args
+                cents ||= 0
+                currency ||= ::Money.default_currency
+                ::Money.new(cents, currency, options[:precision]) 
+              }
+              define_method "#{name}_with_cleanup=" do |amount|
+                send "#{name}_without_cleanup=", amount.blank? ? nil : amount.to_money(options[:precision])
               end
-              m.to_money(options[:precision])
-            },
-            :constructor => lambda{ |*args| 
-              cents, currency = args
-              cents ||= 0
-              currency ||= ::Money.default_currency
-              ::Money.new(cents, currency, options[:precision]) 
-            }
-
-          define_method "#{name}_with_cleanup=" do |amount|
-            send "#{name}_without_cleanup=", amount.blank? ? nil : amount.to_money(options[:precision])
+              alias_method_chain "#{name}=", :cleanup
           end
-          alias_method_chain "#{name}=", :cleanup
+          
+          define_method name.to_s do
+            ::Money.new(send(options[:cents])).to_money(options[:precision])
+          end if options[:only_reader]
         end
       end
     end
